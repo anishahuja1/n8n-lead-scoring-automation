@@ -1,0 +1,115 @@
+{
+  "name": "Auto-tagging & Lead Scoring Workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "1a2b3c4d",
+      "name": "When clicking \"Execute Workflow\"",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "fileSelector": "lead_database.xlsx"
+      },
+      "id": "2b3c4d5e",
+      "name": "Read Excel File",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [200, 0]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "binaryPropertyName": "data",
+        "options": {
+            "headerRow": 1
+        }
+      },
+      "id": "3c4d5e6f",
+      "name": "Spreadsheet File",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 1,
+      "position": [400, 0]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const ICP_LOCATIONS = ['bengaluru', 'mumbai', 'chennai', 'new delhi', 'delhi', 'gurgaon'];\nconst ICP_ROLES = ['hr manager', 'administration', 'admin', 'human resource', 'hr', 'dgm', 'executive - hr', 'manager - hr', 'manager - administration & hr'];\nconst ICP_INDUSTRIES = ['information technology', 'manufacturing', 'services', 'it', 'ites'];\n\nlet validLeads = [];\n\nfor (const item of $input.all()) {\n  const lead = item.json;\n  let score = 0;\n  let reasons = [];\n\n  // If the row is completely empty, skip it\n  if (!lead['Name of the Company'] && !lead['161']) continue;\n\n  const city = (lead['City'] || '').toString().toLowerCase();\n  if (ICP_LOCATIONS.some(loc => city.includes(loc))) {\n    score += 20;\n    reasons.push('Location');\n  }\n\n  const role = (lead['Job Title'] || '').toString().toLowerCase();\n  const dept = (lead['Dept'] || '').toString().toLowerCase();\n  if (ICP_ROLES.some(r => role.includes(r) || dept.includes(r))) {\n    score += 25;\n    reasons.push('Role');\n  }\n\n  const industry = (lead['Industry Segment'] || '').toString().toLowerCase();\n  if (ICP_INDUSTRIES.some(ind => industry.includes(ind))) {\n    score += 30;\n    reasons.push('Industry');\n  }\n\n  let tag = 'Cold';\n  if (score >= 75) tag = 'Hot';\n  else if (score >= 40) tag = 'Warm';\n  \n  // Only taking max 100 rows for demo so it doesn\\'t crash google sheets free tier\n  if(validLeads.length < 100) {\n      validLeads.push({\n        json: {\n          'Company Name': lead['Name of the Company'] || lead['161'] || '',\n          'Contact Name': lead['Name'] || lead['Unnamed: 1'] || '',\n          'Job Title': lead['Job Title'] || lead['Unnamed: 2'] || '',\n          'Dept': lead['Dept'] || lead['Unnamed: 3'] || '',\n          'Email': lead['Email'] || lead['Unnamed: 4'] || '',\n          'City': lead['City'] || lead['Unnamed: 9'] || '',\n          'Industry': lead['Industry Segment'] || lead['Unnamed: 16'] || '',\n          'ICP_Score': score,\n          'ICP_Tag': tag,\n          'Match_Reasons': reasons.join(', ') || 'No match'\n        }\n      });\n  }\n}\n\nreturn validLeads;"
+      },
+      "id": "4d5e6f7g",
+      "name": "Scoring Logic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [600, 0]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+            "__rl": true,
+            "value": "YOUR_GOOGLE_SHEET_ID_HERE",
+            "mode": "id"
+        },
+        "sheetName": {
+            "__rl": true,
+            "value": "Sheet1",
+            "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "5e6f7g8h",
+      "name": "Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [800, 0]
+    }
+  ],
+  "connections": {
+    "When clicking \"Execute Workflow\"": {
+      "main": [
+        [
+          {
+            "node": "Read Excel File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Excel File": {
+      "main": [
+        [
+          {
+            "node": "Spreadsheet File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Spreadsheet File": {
+      "main": [
+        [
+          {
+            "node": "Scoring Logic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scoring Logic": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
